@@ -22,7 +22,19 @@ declare global {
 }
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.17",
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.17",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
+  },
   networks: {
     goerli: {
       url: `https://goerli.infura.io/v3/${process.env.GOERLI_INFURA_API_KEY}`,

@@ -6,12 +6,12 @@ interface IDeHubStaking {
   struct UserInfo {
     // Track total staked amount by the holder.
     uint256 totalAmount;
-    // Unlockable block timestamp
-    uint256 unlockableAt;
+    // Unlock timestamp;
+    uint256 unlockAt;
+    // Last tier index
+    uint256 lastTierIndex;
     // Last reward index
     uint256 lastRewardIndex;
-    // // Last deposit amount at last reward period
-    // uint256 lastDepositAmount;
     // Accumulated total rewards
     uint256 harvestTotal;
     // Accumulated claimed rewards
@@ -25,9 +25,21 @@ interface IDeHubStaking {
     uint256 amount;
   }
 
+  event RewardPeriod(uint256 rewardPeriod);
+  event ForceUnstakeFee(uint256 forceUnstakeFee);
   event TierPeriods(uint256[] tierPeriods, uint256[] tierPercents);
-  event Staked(address indexed user, uint256 amount, uint256 period);
-  event Unstaked(address indexed user, uint256 amount);
-  event FundedReward(uint256 amount);
+  event Staked(
+    address indexed user,
+    uint256 period,
+    uint256 amount,
+    uint256 stakeAt
+  );
+  event Unstaked(
+    address indexed user,
+    uint256 actualAmount,
+    uint256 transferAmount,
+    uint256 unstakeAt
+  );
+  event FundedReward(uint256 rewardIndex, uint256 amount);
   event Claimed(address indexed user, uint256 amount);
 }
