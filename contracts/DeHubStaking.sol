@@ -21,38 +21,42 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
   IERC20Upgradeable public dehubToken;
   IERC20Upgradeable public rewardToken;
+  
+  struct Pool {
+    /**
+     * @notice Start timestamp of Staking contract
+     *
+     */
+    uint256 stakingStartAt;
+    /**
+     * @notice Fixed reward period, after every reward period, users can claim
+     * their accumulated rewards
+     */
+    uint256 rewardPeriod;
+    /**
+     * @notice Every time owner funds reward, increase reward index and
+     * stakers can get rewards after reward period
+     */
+    uint256 lastRewardIndex;
+    /**
+     * @notice If users unstake earlier than the term, they will face % of fee.
+     * 100% in 10000
+     */
+    uint256 forceUnstakeFee;
+    /**
+     * @notice Tier periods in second, staked tokens will be locked
+     * according to this period
+     */
+    uint256[] tierPeriods;
+    /**
+     * @notice Every tier has different percent charging of rewards, 100% in 10000
+     * i.e. Tier 1 = 25% of total reward, Tier 2 = 25%, Tier 3 = 50%
+     * The length of tierPeriods and tierPercents should be same
+     */
+    uint256[] tierPercents;
+  }
 
-  /**
-   * @notice Start timestamp of Staking contract
-   *
-   */
-  uint256 public stakingStartAt;
-  /**
-   * @notice Tier periods in second, staked tokens will be locked
-   * according to this period
-   */
-  uint256[] public tierPeriods;
-  /**
-   * @notice Every tier has different percent charging of rewards, 100% in 10000
-   * i.e. Tier 1 = 25% of total reward, Tier 2 = 25%, Tier 3 = 50%
-   * The length of tierPeriods and tierPercents should be same
-   */
-  uint256[] public tierPercents;
-  /**
-   * @notice Fixed reward period, after every reward period, users can claim
-   * their accumulated rewards
-   */
-  uint256 public rewardPeriod;
-  /**
-   * @notice Every time owner funds reward, increase reward index and
-   * stakers can get rewards after reward period
-   */
-  uint256 public lastRewardIndex;
-  /**
-   * @notice If users unstake earlier than the term, they will face % of fee.
-   * 100% in 10000
-   */
-  uint256 public forceUnstakeFee;
+  Pool public pool;
 
   uint256 public constant shareMultiplier = 10000;
 
@@ -63,6 +67,9 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   mapping(uint256 => mapping(uint256 => uint256)) public totalSharesOnTiers;
   mapping(uint256 => Reward) public rewards;
   mapping(address => UserInfo) public userInfos;
+
+  uint256 public totalStaked;
+  uint256 public totalStakers;
 
   /* -------------------------------------------------------------------------- */
   /*                                  Modifiers                                 */
@@ -84,25 +91,25 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     dehubToken = dehubToken_;
     rewardToken = rewardToken_;
-    rewardPeriod = rewardPeriod_;
-    forceUnstakeFee = forceUnstakeFee_;
-    tierPeriods = tierPeriods_;
-    tierPercents = tierPercents_;
+    pool.rewardPeriod = rewardPeriod_;
+    pool.forceUnstakeFee = forceUnstakeFee_;
+    pool.tierPeriods = tierPeriods_;
+    pool.tierPercents = tierPercents_;
 
-    stakingStartAt = block.timestamp;
+    pool.stakingStartAt = block.timestamp;
   }
 
   function setRewardPeriod(uint256 rewardPeriod_) external onlyOwner {
     if (rewardPeriod_ == 0) {
       revert ZeroPeriod();
     }
-    rewardPeriod = rewardPeriod_;
+    pool.rewardPeriod = rewardPeriod_;
     emit RewardPeriod(rewardPeriod_);
   }
 
   function setForceUnstakeFee(uint256 forceUnstakeFee_) external onlyOwner {
-    forceUnstakeFee = forceUnstakeFee_;
-    emit ForceUnstakeFee(forceUnstakeFee);
+    pool.forceUnstakeFee = forceUnstakeFee_;
+    emit ForceUnstakeFee(pool.forceUnstakeFee);
   }
 
   function setTierPeriods(
@@ -112,8 +119,8 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     if (tierPeriods_.length != tierPercents_.length) {
       revert InvalidTierPeriods();
     }
-    tierPeriods = tierPeriods_;
-    tierPercents = tierPercents_;
+    pool.tierPeriods = tierPeriods_;
+    pool.tierPercents = tierPercents_;
     emit TierPeriods(tierPeriods_, tierPercents_);
   }
 
@@ -158,7 +165,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 startRewardIndex = _getRewardIndex(block.timestamp);
 
     // Stakers can't stake in the past reward period
-    if (startRewardIndex < lastRewardIndex) {
+    if (startRewardIndex < pool.lastRewardIndex) {
       revert StakeOnPastRewardIndex();
     }
 
@@ -270,7 +277,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   function fund(uint256 amount) external onlyOwner whenNotPaused {
     uint256 rewardIndex = _getRewardIndex(block.timestamp);
     rewards[rewardIndex] = Reward({fundedAt: block.timestamp, amount: amount});
-    lastRewardIndex = rewardIndex + 1;
+    pool.lastRewardIndex = rewardIndex + 1;
 
     rewardToken.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -282,9 +289,9 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   /* -------------------------------------------------------------------------- */
 
   function _getTierIndex(uint256 period) internal view returns (uint256) {
-    uint256 length = tierPeriods.length;
+    uint256 length = pool.tierPeriods.length;
     for (uint256 i = length - 1; i > 0; --i) {
-      if (period >= tierPeriods[i]) {
+      if (period >= pool.tierPeriods[i]) {
         return i;
       }
     }
@@ -292,31 +299,31 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   }
 
   function _getRewardIndex(uint256 at) internal view returns (uint256) {
-    if (at <= stakingStartAt) {
+    if (at <= pool.stakingStartAt) {
       return 0;
     }
-    return (at - stakingStartAt) / rewardPeriod;
+    return (at - pool.stakingStartAt) / pool.rewardPeriod;
   }
 
   function _getRewardStartAt(
     uint256 rewardIndex
   ) internal view returns (uint256) {
-    return stakingStartAt + rewardIndex * rewardPeriod;
+    return pool.stakingStartAt + rewardIndex * pool.rewardPeriod;
   }
 
   function _getRewardEndAt(
     uint256 rewardIndex
   ) internal view returns (uint256) {
-    return stakingStartAt + (rewardIndex + 1) * rewardPeriod;
+    return pool.stakingStartAt + (rewardIndex + 1) * pool.rewardPeriod;
   }
 
   function _updatePool(UserInfo storage userInfo) internal {
     // If stake/unstake on the new reward period, then calculate reward
-    if (userInfo.lastRewardIndex < lastRewardIndex) {
-      uint256 tierCount = tierPeriods.length;
+    if (userInfo.lastRewardIndex < pool.lastRewardIndex) {
+      uint256 tierCount = pool.tierPeriods.length;
       for (
         uint256 rewardIndex = userInfo.lastRewardIndex;
-        rewardIndex < lastRewardIndex;
+        rewardIndex < pool.lastRewardIndex;
         ++rewardIndex
       ) {
         for (uint256 tierIndex = 0; tierIndex < tierCount; ++tierIndex) {
@@ -328,7 +335,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
           );
         }
       }
-      userInfo.lastRewardIndex = lastRewardIndex;
+      userInfo.lastRewardIndex = pool.lastRewardIndex;
     }
   }
 
@@ -348,6 +355,11 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 startAt;
     uint256 endAt;
     uint256 stakingShare;
+
+    totalStaked += amount;
+    if (userInfo.totalAmount == 0) {
+      totalStakers++;
+    }
 
     userInfo.lastTierIndex = tierIndex;
     // Accumulate total staked amount
@@ -383,6 +395,11 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   ) internal returns (uint256) {
     // Decrease total amount
     userInfo.totalAmount -= amount;
+    totalStaked -= amount;
+
+    if (userInfo.totalAmount == 0) {
+      totalStakers--;
+    }
 
     uint256 tierIndex = userInfo.lastTierIndex;
     uint256 endRewardIndex = _getRewardIndex(unstakeAt);
@@ -393,7 +410,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 stakingShare;
     // Should unstake only in the current or future reward period
     // And should not change shares in the past reward periods already funded
-    while (amountOnShare > 0 && rewardIndex >= lastRewardIndex) {
+    while (amountOnShare > 0 && rewardIndex >= pool.lastRewardIndex) {
       if (stakingShares[rewardIndex][tierIndex][msg.sender] >= amountOnShare) {
         stakingShares[rewardIndex][tierIndex][msg.sender] -= amountOnShare;
         totalSharesOnTiers[rewardIndex][tierIndex] -= amountOnShare;
@@ -419,7 +436,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     UserInfo storage userInfo,
     uint256 amount
   ) internal returns (uint256) {
-    return _unstake(userInfo, amount, forceUnstakeFee, userInfo.unlockAt);
+    return _unstake(userInfo, amount, pool.forceUnstakeFee, userInfo.unlockAt);
   }
 
   function _calculateReward(
@@ -427,7 +444,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 tierIndex,
     address account
   ) internal view returns (uint256) {
-    if (rewardIndex >= lastRewardIndex) {
+    if (rewardIndex >= pool.lastRewardIndex) {
       return 0;
     }
 
@@ -437,7 +454,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     }
 
     uint256 rewardsAmount = (rewards[rewardIndex].amount *
-      tierPercents[tierIndex] *
+      pool.tierPercents[tierIndex] *
       stakingShares[rewardIndex][tierIndex][account]) /
       totalShareOnTier /
       10000;
@@ -447,6 +464,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   /* -------------------------------------------------------------------------- */
   /*                               View Functions                               */
   /* -------------------------------------------------------------------------- */
+
+  function getPoolInfo() external view returns (Pool memory) {
+    return pool;
+  }
 
   function getTierIndex(uint256 period) external view returns (uint256) {
     return _getTierIndex(period);
@@ -492,6 +513,22 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     return userInfo.lastTierIndex;
   }
 
+  function userStakingShares(address account) external view returns (uint256) {
+    UserInfo storage userInfo = userInfos[account];
+    uint256 rewardIndex = _getRewardIndex(block.timestamp);
+    return stakingShares[rewardIndex][userInfo.lastTierIndex][account];
+  }
+
+  function totalShares() external view returns (uint256 [] memory) {
+    uint256 rewardIndex = _getRewardIndex(block.timestamp);
+    uint256 length = pool.tierPeriods.length;
+    uint256[] memory sharesPerTiers = new uint256[](length);
+    for (uint256 i = 0; i < length; ++i) {
+      sharesPerTiers[i] = totalSharesOnTiers[rewardIndex][i];
+    }
+    return sharesPerTiers;
+  }
+
   /**
    * @notice Get total pending harvest to claim
    */
@@ -499,10 +536,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     UserInfo storage userInfo = userInfos[account];
     // Should add pending harvest at current reward period
     uint256 harvestTotal = userInfo.harvestTotal;
-    uint256 tierCount = tierPeriods.length;
+    uint256 tierCount = pool.tierPeriods.length;
     for (
       uint256 rewardIndex = userInfo.lastRewardIndex;
-      rewardIndex < lastRewardIndex;
+      rewardIndex < pool.lastRewardIndex;
       ++rewardIndex
     ) {
       for (uint256 tierIndex = 0; tierIndex < tierCount; ++tierIndex) {

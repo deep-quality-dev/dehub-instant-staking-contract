@@ -140,9 +140,10 @@ describe("DeHubStaking", function () {
     });
 
     it("Should set tier periods", async () => {
+      const pool = await dehubStaking.getPoolInfo();
       for (let i = 0; i < tierPeriods.length; i++) {
-        expect(await dehubStaking.tierPeriods(i)).to.be.equal(tierPeriods[i]);
-        expect(await dehubStaking.tierPercents(i)).to.be.equal(tierPercents[i]);
+        expect(pool.tierPeriods[i]).to.be.equal(tierPeriods[i]);
+        expect(pool.tierPercents[i]).to.be.equal(tierPercents[i]);
       }
     });
   });

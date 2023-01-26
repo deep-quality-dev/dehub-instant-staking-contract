@@ -1,5 +1,7 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { ethers, network, upgrades } from "hardhat";
+import * as manifestBsc from "../.openzeppelin/unknown-97.json";
+import * as manifestBscTestnet from "../.openzeppelin/unknown-97.json";
 import { DeHubStaking__factory } from "../typechain-types";
 import { config } from "./config";
 import { verifyContract } from "./helpers";
@@ -18,23 +20,13 @@ const main = async () => {
     // network.name === "hardhat" ||
     network.name === "bscTestnet"
   ) {
+    const proxyAddr =
+      network.name === "bscTestnet"
+        ? manifestBscTestnet.proxies[0].address
+        : manifestBsc.proxies[0].address;
+
     const DeHubStakingFactory = new DeHubStaking__factory(deployer);
-    const dehubStaking = await upgrades.deployProxy(
-      DeHubStakingFactory,
-      [
-        config[network.name].dehubToken,
-        config[network.name].rewardToken,
-        config[network.name].rewardPeriod,
-        config[network.name].forceUnstakeFee,
-        config[network.name].periods,
-        config[network.name].percents,
-      ],
-      {
-        kind: "uups",
-        initializer: "__DeHubStaking_init",
-      }
-    );
-    await dehubStaking.deployed();
+    const dehubStaking = await upgrades.upgradeProxy(proxyAddr, DeHubStakingFactory);
 
     console.log(`DeHubStaking deployed at ${dehubStaking.address}`);
 

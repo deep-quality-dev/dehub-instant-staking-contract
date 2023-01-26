@@ -4,19 +4,17 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomicfoundation/hardhat-chai-matchers";
 import "@openzeppelin/hardhat-upgrades";
+import "hardhat-contract-sizer";
 
 dotenv.config();
 
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
-      GOERLI_INFURA_API_KEY: string;
-      MAINNET_INFURA_API_KEY: string;
-
       TESTNET_PRIVATE_KEY: string;
       MAINNET_PRIVATE_KEY: string;
       
-      ETHERSCAN_API_KEY: string;
+      BSCSCAN_API_KEY: string;
     }
   }
 }
@@ -36,19 +34,24 @@ const config: HardhatUserConfig = {
     ],
   },
   networks: {
-    goerli: {
-      url: `https://goerli.infura.io/v3/${process.env.GOERLI_INFURA_API_KEY}`,
-      accounts: [process.env.TESTNET_PRIVATE_KEY],
-    },
-    mainnet: {
-      url: `https://mainnet.infura.io/v3/${process.env.MAINNET_INFURA_API_KEY}`,
+    bsc: {
+      url: `https://bsc-dataseed.binance.org`,
       accounts: [process.env.MAINNET_PRIVATE_KEY],
     },
+    bscTestnet: {
+      url: `https://bsc-testnet.public.blastapi.io`,
+      accounts: [process.env.TESTNET_PRIVATE_KEY],
+    },
+  },
+  contractSizer: {
+    alphaSort: true,
+    runOnCompile: true,
+    disambiguatePaths: false,
   },
   etherscan: {
     apiKey: {
-      goerli: process.env.ETHERSCAN_API_KEY,
-      mainnet: process.env.ETHERSCAN_API_KEY,
+      bsc: process.env.BSCSCAN_API_KEY,
+      bscTestnet: process.env.BSCSCAN_API_KEY,
     },
   },
 };
