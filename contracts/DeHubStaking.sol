@@ -5,16 +5,6 @@ import "hardhat/console.sol";
 import {DeHubUpgradeable, IERC20Upgradeable, SafeMathUpgradeable, SafeERC20Upgradeable} from "./abstracts/DeHubUpgradeable.sol";
 import {IDeHubStaking} from "./interfaces/IDeHubStaking.sol";
 
-error ZeroPeriod();
-error ZeroAmount();
-error InvalidTierPeriods();
-error InvalidTier();
-error StakeOnPastRewardIndex();
-error InvalidUnstakeAmount();
-error InvalidRewardIndex();
-error ZeroHarvestAmount();
-error NotEnoughRewards();
-
 contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   using SafeMathUpgradeable for uint256;
   using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -100,9 +90,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   }
 
   function setRewardPeriod(uint256 rewardPeriod_) external onlyOwner {
-    if (rewardPeriod_ == 0) {
-      revert ZeroPeriod();
-    }
+    require(rewardPeriod_ != 0, "Zero input period");
     pool.rewardPeriod = rewardPeriod_;
     emit RewardPeriod(rewardPeriod_);
   }
@@ -116,9 +104,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256[] calldata tierPeriods_,
     uint256[] calldata tierPercents_
   ) external onlyOwner {
-    if (tierPeriods_.length != tierPercents_.length) {
-      revert InvalidTierPeriods();
-    }
+    require(tierPeriods_.length == tierPercents_.length, "Not match tiers length");
     pool.tierPeriods = tierPeriods_;
     pool.tierPercents = tierPercents_;
     emit TierPeriods(tierPeriods_, tierPercents_);
@@ -146,12 +132,8 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
    * If user staked multiple times, the longest time will be unlock time.
    */
   function stake(uint256 period, uint256 amount) external whenNotPaused {
-    if (period < 1) {
-      revert ZeroPeriod();
-    }
-    if (amount < 1) {
-      revert ZeroAmount();
-    }
+    require(period > 0, "Zero input period");
+    require(amount > 0, "Zero input amount");
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
@@ -165,9 +147,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 startRewardIndex = _getRewardIndex(block.timestamp);
 
     // Stakers can't stake in the past reward period
-    if (startRewardIndex < pool.lastRewardIndex) {
-      revert StakeOnPastRewardIndex();
-    }
+    require(startRewardIndex >= pool.lastRewardIndex, "Not allowed to stake in past reward period");
 
     // In the locked period, stakers can't change tier
     if (
@@ -175,7 +155,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
       endLockedRewardIndex >= startRewardIndex &&
       tierIndex != userInfo.lastTierIndex
     ) {
-      revert InvalidTier();
+      revert("Different tier index with previous one");
     }
 
     // Update total claimable amoount
@@ -198,9 +178,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 period,
     uint256 restakeCount
   ) external whenNotPaused {
-    if (period < 1) {
-      revert ZeroPeriod();
-    }
+    require(period > 0, "Zero input period");
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
@@ -229,9 +207,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   function unstake(uint256 amount) external whenNotPaused {
     UserInfo storage userInfo = userInfos[msg.sender];
 
-    if (userInfo.totalAmount < amount) {
-      revert InvalidUnstakeAmount();
-    }
+    require(userInfo.totalAmount >= amount, "Invalid unstake amount");
 
     _updatePool(userInfo);
 
@@ -256,12 +232,8 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     UserInfo storage userInfo = userInfos[msg.sender];
 
     uint256 claimable = pendingHarvest(msg.sender);
-    if (claimable == 0) {
-      revert ZeroHarvestAmount();
-    }
-    if (rewardToken.balanceOf(address(this)) < claimable) {
-      revert NotEnoughRewards();
-    }
+    require(claimable > 0, "Nothing to harvest");
+    require(rewardToken.balanceOf(address(this)) >= claimable, "Not enough rewards");
 
     _updatePool(userInfo);
 

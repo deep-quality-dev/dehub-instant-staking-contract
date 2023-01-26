@@ -208,7 +208,7 @@ describe("DeHubStaking", function () {
       const period2 = 25000;
       await expect(
         doStake(stakerA, period2, amount)
-      ).to.be.revertedWithCustomError(dehubStaking, "InvalidTier");
+      ).to.be.revertedWith("Different tier index with previous one");
 
       const period3 = 10000;
       await expect(doStake(stakerA, period3, amount)).to.be.not.reverted;
@@ -396,7 +396,7 @@ describe("DeHubStaking", function () {
 
       await expect(
         doUnstake(stakerA, BigNumber.from(1))
-      ).to.be.revertedWithCustomError(dehubStaking, "InvalidUnstakeAmount");
+      ).to.be.revertedWith("Invalid unstake amount");
     });
 
     it("Should revert when unstake more than stake", async () => {
@@ -408,7 +408,7 @@ describe("DeHubStaking", function () {
 
       await expect(
         doUnstake(stakerA, amount.mul(2))
-      ).to.be.revertedWithCustomError(dehubStaking, "InvalidUnstakeAmount");
+      ).to.be.revertedWith("Invalid unstake amount");
     });
 
     it("Should unstake staked amount", async () => {
@@ -712,9 +712,8 @@ describe("DeHubStaking", function () {
       const totalAmount = await userTotalStakedAmount(stakerA);
       expect(totalAmount).to.be.equal(BigNumber.from(0));
 
-      await expect(doClaim(stakerA)).to.be.revertedWithCustomError(
-        dehubStaking,
-        "ZeroHarvestAmount"
+      await expect(doClaim(stakerA)).to.be.revertedWith(
+        "Nothing to harvest"
       );
     });
 
@@ -751,9 +750,8 @@ describe("DeHubStaking", function () {
       await time.increaseTo(rewardEndAt);
 
       await expect(doClaim(stakerA)).to.be.not.reverted;
-      await expect(doClaim(stakerA)).to.be.revertedWithCustomError(
-        dehubStaking,
-        "ZeroHarvestAmount"
+      await expect(doClaim(stakerA)).to.be.revertedWith(
+        "Nothing to harvest"
       );
     });
 
