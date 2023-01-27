@@ -199,6 +199,34 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     _stake(userInfo, tierIndex, period * restakeCount, newAmount, nextStakeAt);
     emit Staked(msg.sender, period, newAmount, nextStakeAt);
   }
+  
+  function restakePortion(uint256 amount, uint256 period, uint256 restakeCount) external whenNotPaused {
+    require(period > 0, "Zero input period");
+
+    UserInfo storage userInfo = userInfos[msg.sender];
+
+    uint256 rewardIndex = _getRewardIndex(block.timestamp);
+    uint256 tierIndex = _getTierIndex(period);
+    uint256 newAmount = 0;
+    if (userInfo.unlockAt > block.timestamp) {
+      // unstake earlier
+      newAmount = _forceUnstake(userInfo, userInfo.totalAmount);
+    } else {
+      newAmount = _unstake(userInfo, userInfo.totalAmount, 0, block.timestamp);
+    }
+    require(amount <= newAmount, "Too much input amount to restake");
+
+    uint256 nextStakeAt = tierIndex != userInfo.lastTierIndex // If restake with different tier, staking starts at next reward period
+      ? _getRewardStartAt(rewardIndex + 1)
+      : block.timestamp;
+
+    _stake(userInfo, tierIndex, period * restakeCount, amount, nextStakeAt);
+    if (amount < newAmount) {
+      dehubToken.safeTransfer(msg.sender, newAmount - amount);
+      emit RemainingTransfered(msg.sender, newAmount - amount);
+    }
+    emit Staked(msg.sender, period, amount, nextStakeAt);
+  }
 
   /**
    * @notice Unstake unlocked tokens, even if user staked on different tiers,

@@ -34,6 +34,10 @@ interface IDeHubStaking {
     uint256 amount,
     uint256 stakeAt
   );
+  event RemainingTransfered(
+    address indexed user,
+    uint256 transferAmount
+  );
   event Unstaked(
     address indexed user,
     uint256 actualAmount,
