@@ -26,7 +26,10 @@ const main = async () => {
         : manifestBsc.proxies[0].address;
 
     const DeHubStakingFactory = new DeHubStaking__factory(deployer);
-    const dehubStaking = await upgrades.upgradeProxy(proxyAddr, DeHubStakingFactory);
+    const dehubStaking = await upgrades.upgradeProxy(
+      proxyAddr,
+      DeHubStakingFactory
+    );
 
     console.log(`DeHubStaking deployed at ${dehubStaking.address}`);
 

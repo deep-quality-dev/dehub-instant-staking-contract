@@ -11,7 +11,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
   IERC20Upgradeable public dehubToken;
   IERC20Upgradeable public rewardToken;
-  
+
   struct Pool {
     /**
      * @notice Start timestamp of Staking contract
@@ -104,7 +104,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256[] calldata tierPeriods_,
     uint256[] calldata tierPercents_
   ) external onlyOwner {
-    require(tierPeriods_.length == tierPercents_.length, "Not match tiers length");
+    require(
+      tierPeriods_.length == tierPercents_.length,
+      "Not match tiers length"
+    );
     pool.tierPeriods = tierPeriods_;
     pool.tierPercents = tierPercents_;
     emit TierPeriods(tierPeriods_, tierPercents_);
@@ -147,7 +150,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 startRewardIndex = _getRewardIndex(block.timestamp);
 
     // Stakers can't stake in the past reward period
-    require(startRewardIndex >= pool.lastRewardIndex, "Not allowed to stake in past reward period");
+    require(
+      startRewardIndex >= pool.lastRewardIndex,
+      "Not allowed to stake in past reward period"
+    );
 
     // In the locked period, stakers can't change tier
     if (
@@ -165,7 +171,14 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     dehubToken.safeTransferFrom(msg.sender, address(this), amount);
 
-    emit Staked(msg.sender, period, amount, block.timestamp);
+    emit Staked(
+      msg.sender,
+      period,
+      amount,
+      block.timestamp,
+      startRewardIndex,
+      tierIndex
+    );
   }
 
   /**
@@ -182,50 +195,23 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
-    uint256 rewardIndex = _getRewardIndex(block.timestamp);
-    uint256 tierIndex = _getTierIndex(period);
-    uint256 newAmount = 0;
-    if (userInfo.unlockAt > block.timestamp) {
-      // unstake earlier
-      newAmount = _forceUnstake(userInfo, userInfo.totalAmount);
-    } else {
-      newAmount = _unstake(userInfo, userInfo.totalAmount, 0, block.timestamp);
-    }
-
-    uint256 nextStakeAt = tierIndex != userInfo.lastTierIndex // If restake with different tier, staking starts at next reward period
-      ? _getRewardStartAt(rewardIndex + 1)
-      : block.timestamp;
-
-    _stake(userInfo, tierIndex, period * restakeCount, newAmount, nextStakeAt);
-    emit Staked(msg.sender, period, newAmount, nextStakeAt);
+    _updatePool(userInfo);
+    _restake(userInfo, userInfo.totalAmount, period, restakeCount);
   }
-  
-  function restakePortion(uint256 amount, uint256 period, uint256 restakeCount) external whenNotPaused {
+
+  function restakePortion(
+    uint256 amount,
+    uint256 period,
+    uint256 restakeCount
+  ) external whenNotPaused {
     require(period > 0, "Zero input period");
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
-    uint256 rewardIndex = _getRewardIndex(block.timestamp);
-    uint256 tierIndex = _getTierIndex(period);
-    uint256 newAmount = 0;
-    if (userInfo.unlockAt > block.timestamp) {
-      // unstake earlier
-      newAmount = _forceUnstake(userInfo, userInfo.totalAmount);
-    } else {
-      newAmount = _unstake(userInfo, userInfo.totalAmount, 0, block.timestamp);
-    }
-    require(amount <= newAmount, "Too much input amount to restake");
+    require(userInfo.totalAmount >= amount, "Invalid restake amount");
 
-    uint256 nextStakeAt = tierIndex != userInfo.lastTierIndex // If restake with different tier, staking starts at next reward period
-      ? _getRewardStartAt(rewardIndex + 1)
-      : block.timestamp;
-
-    _stake(userInfo, tierIndex, period * restakeCount, amount, nextStakeAt);
-    if (amount < newAmount) {
-      dehubToken.safeTransfer(msg.sender, newAmount - amount);
-      emit RemainingTransfered(msg.sender, newAmount - amount);
-    }
-    emit Staked(msg.sender, period, amount, nextStakeAt);
+    _updatePool(userInfo);
+    _restake(userInfo, amount, period, restakeCount);
   }
 
   /**
@@ -261,7 +247,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     uint256 claimable = pendingHarvest(msg.sender);
     require(claimable > 0, "Nothing to harvest");
-    require(rewardToken.balanceOf(address(this)) >= claimable, "Not enough rewards");
+    require(
+      rewardToken.balanceOf(address(this)) >= claimable,
+      "Not enough rewards"
+    );
 
     _updatePool(userInfo);
 
@@ -439,6 +428,41 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     return _unstake(userInfo, amount, pool.forceUnstakeFee, userInfo.unlockAt);
   }
 
+  function _restake(
+    UserInfo storage userInfo,
+    uint256 amount,
+    uint256 period,
+    uint256 restakeCount
+  ) internal {
+    uint256 rewardIndex = _getRewardIndex(block.timestamp);
+    uint256 tierIndex = _getTierIndex(period);
+    uint256 newAmount = 0;
+    if (userInfo.unlockAt > block.timestamp) {
+      // unstake earlier
+      newAmount = _forceUnstake(userInfo, amount);
+    } else {
+      newAmount = _unstake(userInfo, amount, 0, block.timestamp);
+    }
+
+    uint256 nextStakeAt = tierIndex != userInfo.lastTierIndex // If restake with different tier, staking starts at next reward period
+      ? _getRewardStartAt(rewardIndex + 1)
+      : block.timestamp;
+
+    _stake(userInfo, tierIndex, period * restakeCount, newAmount, nextStakeAt);
+    if (amount > newAmount) {
+      dehubToken.safeTransfer(msg.sender, amount - newAmount);
+      emit RemainingTransfered(msg.sender, amount - newAmount);
+    }
+    emit Staked(
+      msg.sender,
+      period,
+      amount,
+      nextStakeAt,
+      tierIndex != userInfo.lastTierIndex ? rewardIndex + 1 : rewardIndex,
+      tierIndex
+    );
+  }
+
   function _calculateReward(
     uint256 rewardIndex,
     uint256 tierIndex,
@@ -519,7 +543,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     return stakingShares[rewardIndex][userInfo.lastTierIndex][account];
   }
 
-  function totalShares() external view returns (uint256 [] memory) {
+  function totalShares() external view returns (uint256[] memory) {
     uint256 rewardIndex = _getRewardIndex(block.timestamp);
     uint256 length = pool.tierPeriods.length;
     uint256[] memory sharesPerTiers = new uint256[](length);
