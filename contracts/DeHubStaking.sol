@@ -149,12 +149,6 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     // Current reward period index
     uint256 startRewardIndex = _getRewardIndex(block.timestamp);
 
-    // Stakers can't stake in the past reward period
-    require(
-      startRewardIndex >= pool.lastRewardIndex,
-      "Not allowed to stake in past reward period"
-    );
-
     // In the locked period, stakers can't change tier
     if (
       userInfo.totalAmount > 0 &&
@@ -470,10 +464,6 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 tierIndex,
     address account
   ) internal view returns (uint256) {
-    if (rewardIndex >= pool.lastRewardIndex) {
-      return 0;
-    }
-
     uint256 totalShareOnTier = totalSharesOnTiers[rewardIndex][tierIndex];
     if (totalShareOnTier == 0) {
       return 0;
@@ -563,9 +553,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     // Should add pending harvest at current reward period
     uint256 harvestTotal = userInfo.harvestTotal;
     uint256 tierCount = pool.tierPeriods.length;
+    uint256 nowRewardIndex = _getRewardIndex(block.timestamp);
     for (
       uint256 rewardIndex = userInfo.lastRewardIndex;
-      rewardIndex < pool.lastRewardIndex;
+      rewardIndex < nowRewardIndex;
       ++rewardIndex
     ) {
       for (uint256 tierIndex = 0; tierIndex < tierCount; ++tierIndex) {
