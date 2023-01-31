@@ -822,6 +822,10 @@ describe("DeHubStaking", function () {
         const balanceAfter = await rewardToken.balanceOf(stakerA.address);
         expect(balanceAfter.sub(balanceBefore)).to.be.equal(claimableA);
       });
+
+      it("Fund multiple times and claim multiple times", async () => {
+        // todo
+      });
     });
 
     describe("Stake & Unstake & Fund & Claim", async () => {

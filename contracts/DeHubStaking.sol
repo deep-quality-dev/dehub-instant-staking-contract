@@ -265,7 +265,11 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
    */
   function fund(uint256 amount) external onlyOwner whenNotPaused {
     uint256 rewardIndex = _getRewardIndex(block.timestamp);
-    rewards[rewardIndex] = Reward({fundedAt: block.timestamp, amount: amount});
+    uint256 lastAmount = rewards[rewardIndex].amount;
+    rewards[rewardIndex] = Reward({
+      fundedAt: block.timestamp,
+      amount: lastAmount + amount
+    });
     pool.lastRewardIndex = rewardIndex + 1;
 
     rewardToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -307,12 +311,14 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   }
 
   function _updatePool(UserInfo storage userInfo) internal {
+    uint256 nowRewardIndex = _getRewardIndex(block.timestamp);
+
     // If stake/unstake on the new reward period, then calculate reward
-    if (userInfo.lastRewardIndex < pool.lastRewardIndex) {
+    if (userInfo.lastRewardIndex < nowRewardIndex) {
       uint256 tierCount = pool.tierPeriods.length;
       for (
         uint256 rewardIndex = userInfo.lastRewardIndex;
-        rewardIndex < pool.lastRewardIndex;
+        rewardIndex < nowRewardIndex;
         ++rewardIndex
       ) {
         for (uint256 tierIndex = 0; tierIndex < tierCount; ++tierIndex) {
@@ -324,7 +330,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
           );
         }
       }
-      userInfo.lastRewardIndex = pool.lastRewardIndex;
+      userInfo.lastRewardIndex = nowRewardIndex;
     }
   }
 
@@ -449,14 +455,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
       : block.timestamp;
 
     _stake(userInfo, tierIndex, period * restakeCount, newAmount, nextStakeAt);
-    if (amount > newAmount) {
-      dehubToken.safeTransfer(msg.sender, amount - newAmount);
-      emit RemainingTransfered(msg.sender, amount - newAmount);
-    }
     emit Staked(
       msg.sender,
       period,
-      amount,
+      newAmount,
       nextStakeAt,
       tierIndex != userInfo.lastTierIndex ? rewardIndex + 1 : rewardIndex,
       tierIndex

@@ -36,13 +36,12 @@ interface IDeHubStaking {
     uint256 indexed rewardIndex,
     uint256 indexed tierIndex
   );
-  event RemainingTransfered(address indexed user, uint256 transferAmount);
   event Unstaked(
     address indexed user,
     uint256 actualAmount,
     uint256 transferAmount,
     uint256 unstakeAt
   );
-  event FundedReward(uint256 rewardIndex, uint256 amount);
+  event FundedReward(uint256 indexed rewardIndex, uint256 amount);
   event Claimed(address indexed user, uint256 amount);
 }
