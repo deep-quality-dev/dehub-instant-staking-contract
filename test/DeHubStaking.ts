@@ -858,6 +858,12 @@ describe("DeHubStaking", function () {
         // Fund
         const fundAmount2 = ethers.utils.parseEther("2000");
         await doFund(fundAmount2);
+        [rewardStartAt, rewardEndAt] = [
+          await getRewardStartAt(currentRewardIndex + 1),
+          await getRewardEndAt(currentRewardIndex + 1),
+        ];
+        await time.increaseTo(rewardEndAt);
+
         const claimable2 = fundAmount2.mul(tierPercents[tierIndex]).div(10000);
         // Claim
         const balanceBefore = await rewardToken.balanceOf(stakerA.address);
@@ -900,11 +906,19 @@ describe("DeHubStaking", function () {
         // Fund
         await doFund(fundAmount);
         await time.increaseTo(rewardEndAt - skipSeconds);
+
         // Next reward period
         [rewardStartAt, rewardEndAt] = [
           await getRewardStartAt(currentRewardIndex + 1),
           await getRewardEndAt(currentRewardIndex + 1),
         ];
+        // Stake A,B,C
+        await doStake(stakerA, tierPeriodsA[1], stakeAmount);
+        await time.increaseTo(
+          rewardStartAt + tierPeriodsA[0] / 2 - skipSeconds
+        );
+        await doStake(stakerC, tierPeriodsA[0], stakeAmount);
+        // Check past rewards
         expect(await userPendingHarvest(stakerA)).to.be.equal(
           ethers.utils.parseEther("5")
         );
@@ -915,12 +929,6 @@ describe("DeHubStaking", function () {
           ethers.utils.parseEther("5")
         );
 
-        // Stake A,B,C
-        await doStake(stakerA, tierPeriodsA[1], stakeAmount);
-        await time.increaseTo(
-          rewardStartAt + tierPeriodsA[0] / 2 - skipSeconds
-        );
-        await doStake(stakerC, tierPeriodsA[0], stakeAmount);
         await time.increaseTo(rewardStartAt + tierPeriodsA[0] - skipSeconds);
         // await doStake(stakerB, tierPeriodsA[0], stakeAmount);
         // await time.increaseTo(
@@ -934,16 +942,6 @@ describe("DeHubStaking", function () {
           await getRewardStartAt(currentRewardIndex + 2),
           await getRewardEndAt(currentRewardIndex + 2),
         ];
-        expect(await userPendingHarvest(stakerA)).to.be.equal(
-          ethers.utils.parseEther("5").add(fundAmount.div(2).mul(4).div(5))
-        );
-        expect(await userPendingHarvest(stakerB)).to.be.equal(
-          ethers.utils.parseEther("10").add(fundAmount.div(2).div(5))
-        );
-        expect(await userPendingHarvest(stakerC)).to.be.equal(
-          ethers.utils.parseEther("5").add(fundAmount.div(2))
-        );
-
         // Stake A,B,C
         await doStake(stakerC, tierPeriodsA[1], stakeAmount);
         await time.increaseTo(
@@ -953,6 +951,16 @@ describe("DeHubStaking", function () {
         await doStake(stakerB, tierPeriodsA[0], stakeAmount);
         await time.increaseTo(rewardEndAt - tierPeriodsA[0] / 2 - skipSeconds);
         await doStake(stakerA, tierPeriodsA[0], stakeAmount);
+        // Check past rewards
+        expect(await userPendingHarvest(stakerA)).to.be.equal(
+          ethers.utils.parseEther("5").add(fundAmount.div(2).mul(4).div(5))
+        );
+        expect(await userPendingHarvest(stakerB)).to.be.equal(
+          ethers.utils.parseEther("10").add(fundAmount.div(2).div(5))
+        );
+        expect(await userPendingHarvest(stakerC)).to.be.equal(
+          ethers.utils.parseEther("5").add(fundAmount.div(2))
+        );
         // Fund
         await doFund(fundAmount);
         await time.increaseTo(rewardEndAt);
