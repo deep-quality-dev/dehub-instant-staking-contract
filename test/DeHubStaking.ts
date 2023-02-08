@@ -31,6 +31,7 @@ describe("DeHubStaking", function () {
   const shareMultipler = 10000;
   const rewardPeriod = 15000; // in seconds
   const forceUnstakeFee = 1200; // 12% in 10000 as 100%
+  const minPeriod = 10000;
   const tierPeriods = [10000, 20000, 50000]; // in seconds
   const tierPercents = [2500, 2500, 5000]; // 100% in 10000
   const skipSeconds = 3;
@@ -112,6 +113,7 @@ describe("DeHubStaking", function () {
       rewardToken.address,
       rewardPeriod,
       forceUnstakeFee,
+      minPeriod,
       tierPeriods,
       tierPercents
     );
