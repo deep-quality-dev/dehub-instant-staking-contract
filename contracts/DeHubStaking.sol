@@ -34,6 +34,10 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
      */
     uint256 forceUnstakeFee;
     /**
+     * @notice Minimal staking period
+     */
+    uint256 minPeriod;
+    /**
      * @notice Tier periods in second, staked tokens will be locked
      * according to this period
      */
@@ -74,6 +78,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     IERC20Upgradeable rewardToken_,
     uint256 rewardPeriod_,
     uint256 forceUnstakeFee_,
+    uint256 minPeriod_,
     uint256[] memory tierPeriods_,
     uint256[] memory tierPercents_
   ) public initializer {
@@ -83,6 +88,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     rewardToken = rewardToken_;
     pool.rewardPeriod = rewardPeriod_;
     pool.forceUnstakeFee = forceUnstakeFee_;
+    pool.minPeriod = minPeriod_;
     pool.tierPeriods = tierPeriods_;
     pool.tierPercents = tierPercents_;
 
@@ -97,7 +103,12 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
   function setForceUnstakeFee(uint256 forceUnstakeFee_) external onlyOwner {
     pool.forceUnstakeFee = forceUnstakeFee_;
-    emit ForceUnstakeFee(pool.forceUnstakeFee);
+    emit ForceUnstakeFee(forceUnstakeFee_);
+  }
+
+  function setMinStakePeriod(uint256 minPeriod_) external onlyOwner {
+    pool.minPeriod = minPeriod_;
+    emit MinPeriod(minPeriod_);
   }
 
   function setTierPeriods(
@@ -135,7 +146,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
    * If user staked multiple times, the longest time will be unlock time.
    */
   function stake(uint256 period, uint256 amount) external whenNotPaused {
-    require(period > 0, "Zero input period");
+    require(period >= pool.minPeriod, "Not enough period");
     require(amount > 0, "Zero input amount");
 
     UserInfo storage userInfo = userInfos[msg.sender];
@@ -185,7 +196,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 period,
     uint256 restakeCount
   ) external whenNotPaused {
-    require(period > 0, "Zero input period");
+    require(period >= pool.minPeriod, "Not enough period");
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
@@ -198,7 +209,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 period,
     uint256 restakeCount
   ) external whenNotPaused {
-    require(period > 0, "Zero input period");
+    require(period >= pool.minPeriod, "Not enough period");
 
     UserInfo storage userInfo = userInfos[msg.sender];
 
@@ -271,6 +282,11 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     emit FundedReward(rewardIndex + 1, amount);
   }
 
+  function withdrawFund(uint256 amount) external onlyOwner whenPaused {
+    require(rewardToken.balanceOf(address(this)) >= amount, "Not enough balance");
+    rewardToken.safeTransfer(msg.sender, amount);
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                             Internal Functions                             */
   /* -------------------------------------------------------------------------- */
@@ -282,7 +298,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
         return i;
       }
     }
-    return 0;
+    return length;
   }
 
   function _getRewardIndex(uint256 at) internal view returns (uint256) {
@@ -348,12 +364,15 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     totalStaked += amount;
     if (userInfo.totalAmount == 0) {
       totalStakers++;
+      userInfo.lastStakeAt = stakeAt;
     }
 
     userInfo.lastTierIndex = tierIndex;
     // Accumulate total staked amount
     userInfo.totalAmount += amount;
-    userInfo.unlockAt = unlockAt;
+    userInfo.unlockAt = userInfo.unlockAt > unlockAt
+      ? userInfo.unlockAt
+      : unlockAt;
 
     for (
       uint256 rewardIndex = startRewardIndex;
@@ -388,6 +407,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     if (userInfo.totalAmount == 0) {
       totalStakers--;
+      userInfo.unlockAt = 0;
     }
 
     uint256 tierIndex = userInfo.lastTierIndex;
@@ -436,19 +456,32 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
   ) internal {
     uint256 rewardIndex = _getRewardIndex(block.timestamp);
     uint256 tierIndex = _getTierIndex(period);
-    uint256 newAmount = 0;
+    uint256 unstakedAmount = 0;
+    // Unstake all the staked tokens
     if (userInfo.unlockAt > block.timestamp) {
       // unstake earlier
-      newAmount = _forceUnstake(userInfo, amount);
+      unstakedAmount = _forceUnstake(userInfo, userInfo.totalAmount);
     } else {
-      newAmount = _unstake(userInfo, amount, 0, block.timestamp);
+      unstakedAmount = _unstake(
+        userInfo,
+        userInfo.totalAmount,
+        0,
+        block.timestamp
+      );
     }
 
     uint256 nextStakeAt = tierIndex != userInfo.lastTierIndex // If restake with different tier, staking starts at next reward period
       ? _getRewardStartAt(rewardIndex + 1)
       : block.timestamp;
 
+    uint256 newAmount = amount > unstakedAmount ? unstakedAmount : amount;
+    // Stake only the amount what we want to restake
     _stake(userInfo, tierIndex, period * restakeCount, newAmount, nextStakeAt);
+    // Refund remaining tokens already unstaked, but not staked
+    if (newAmount < unstakedAmount) {
+      dehubToken.safeTransfer(msg.sender, unstakedAmount - newAmount);
+      emit RemainingTransfered(msg.sender, unstakedAmount - newAmount);
+    }
     emit Staked(
       msg.sender,
       period,

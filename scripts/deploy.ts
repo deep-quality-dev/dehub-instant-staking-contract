@@ -26,6 +26,7 @@ const main = async () => {
         config[network.name].rewardToken,
         config[network.name].rewardPeriod,
         config[network.name].forceUnstakeFee,
+        config[network.name].minPeriod,
         config[network.name].periods,
         config[network.name].percents,
       ],
