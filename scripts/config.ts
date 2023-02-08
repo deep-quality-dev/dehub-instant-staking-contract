@@ -23,10 +23,15 @@ export const config: { [network in Network]: Config } = {
   bscTestnet: {
     dehubToken: "0xEad75F6d5E16E86b157937Ba227c13B5fb6864fC",
     rewardToken: "0xEad75F6d5E16E86b157937Ba227c13B5fb6864fC",
-    rewardPeriod: 43200,
+    // rewardPeriod: 43200,
+    // forceUnstakeFee: 1200,
+    // minPeriod: 43200,
+    // periods: [43200, 86400, 172800],
+    // percents: [2500, 2500, 5000],
+    rewardPeriod: 2592000, // 30 days
     forceUnstakeFee: 1200,
-    minPeriod: 43200,
-    periods: [43200, 86400, 172800],
+    minPeriod: 7776000,
+    periods: [7776000, 15552000, 31104000], // 1-2 quarter(180 days), 2-4 quarter(360 days), 4+ quarter
     percents: [2500, 2500, 5000],
   },
 };

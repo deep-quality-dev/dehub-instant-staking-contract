@@ -153,6 +153,7 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
 
     // Staking tier index
     uint256 tierIndex = _getTierIndex(period);
+    require(tierIndex < pool.tierPeriods.length, "Invalid period");
     // End reward period index which involves locked amount
     uint256 endLockedRewardIndex = userInfo.unlockAt > 0
       ? _getRewardIndex(userInfo.unlockAt - 1)
@@ -297,6 +298,9 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
       if (period >= pool.tierPeriods[i]) {
         return i;
       }
+    }
+    if (period >= pool.tierPeriods[0]) {
+      return 0;
     }
     return length;
   }
@@ -457,6 +461,8 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     uint256 rewardIndex = _getRewardIndex(block.timestamp);
     uint256 tierIndex = _getTierIndex(period);
     uint256 unstakedAmount = 0;
+
+    require(tierIndex < pool.tierPeriods.length, "Invalid period");
     // Unstake all the staked tokens
     if (userInfo.unlockAt > block.timestamp) {
       // unstake earlier
