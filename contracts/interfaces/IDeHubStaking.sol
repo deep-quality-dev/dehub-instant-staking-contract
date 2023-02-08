@@ -27,6 +27,7 @@ interface IDeHubStaking {
     uint256 amount;
   }
 
+  event StartAt(uint256 startAt);
   event RewardPeriod(uint256 rewardPeriod);
   event ForceUnstakeFee(uint256 forceUnstakeFee);
   event MinPeriod(uint256 minPeriod);

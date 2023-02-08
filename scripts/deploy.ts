@@ -1,6 +1,6 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { ethers, network, upgrades } from "hardhat";
-import { DeHubStaking__factory } from "../typechain-types";
+import { DeHubStaking, DeHubStaking__factory } from "../typechain-types";
 import { config } from "./config";
 import { verifyContract } from "./helpers";
 
@@ -34,10 +34,13 @@ const main = async () => {
         kind: "uups",
         initializer: "__DeHubStaking_init",
       }
-    );
+    ) as DeHubStaking;
     await dehubStaking.deployed();
 
     console.log(`DeHubStaking deployed at ${dehubStaking.address}`);
+
+    console.log(`Pausing contract...`);
+    await dehubStaking.pause();
 
     const dehubStakingImpl = await upgrades.erc1967.getImplementationAddress(
       dehubStaking.address

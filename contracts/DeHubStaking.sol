@@ -95,6 +95,12 @@ contract DeHubStaking is DeHubUpgradeable, IDeHubStaking {
     pool.stakingStartAt = block.timestamp;
   }
 
+  function setStakingStartAt(uint256 stakingStartAt) external onlyOwner whenPaused {
+    require(totalStaked == 0, "Already started");
+    pool.stakingStartAt = stakingStartAt;
+    emit StartAt(stakingStartAt);
+  }
+
   function setRewardPeriod(uint256 rewardPeriod_) external onlyOwner {
     require(rewardPeriod_ != 0, "Zero input period");
     pool.rewardPeriod = rewardPeriod_;
